@@ -2,9 +2,17 @@
 #include "rgb_lcd.h"
 #include <Keypad.h>
 #include <dht11.h>
+#include <WiFi.h>
+#include <WebServer.h>
 
 rgb_lcd lcd;
 dht11 DHT;
+
+// WiFi credentials
+const char* ssid = "VODAFONE-F578";         
+const char* password = "J9crHhK6x4fKyeth"; 
+
+WebServer server(80);
 
 // Pins
 #define led1 18
@@ -33,6 +41,10 @@ bool alarmActive = false;
 unsigned long previousMillis = 0;
 bool ledState = false;
 
+float temp = 0;
+float hum = 0;
+float distance = 0;
+
 void setup() {
   Serial.begin(9600);
 
@@ -47,16 +59,36 @@ void setup() {
   lcd.print("System Ready");
   delay(2000);
   lcd.clear();
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi");
+  Serial.print("ESP32 IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  server.on("/", handleRoot);
+  server.begin();
 }
 
 void loop() {
+  readSensors();
+  checkAlarm();
+  server.handleClient();
+  delay(300);
+}
+
+void readSensors() {
   int chk = DHT.read(DHT11_PIN);
-  float temp = DHT.temperature;
-  float hum = DHT.humidity;
+  if (chk == DHTLIB_OK) {
+    temp = DHT.temperature;
+    hum = DHT.humidity;
+  }
 
   long duration;
-  float distance;
-
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
@@ -69,8 +101,11 @@ void loop() {
   Serial.print("Distance: ");
   Serial.print(distance);
   Serial.println(" cm");
+}
 
+void checkAlarm() {
   int pirValue = digitalRead(pirSensorPin);
+
   if (pirValue == HIGH || distance <= 30) {
     alarmActive = true;
   }
@@ -119,8 +154,6 @@ void loop() {
     lcd.print(hum, 0);
     lcd.print("%   ");
   }
-
-  delay(300);
 }
 
 void flashLEDs() {
@@ -140,4 +173,15 @@ void displayMessage(String message) {
     lcd.print(message);
     previousMessage = message;
   }
+}
+
+void handleRoot() {
+  String page = "<html><head><title>ESP32 Sensor</title></head><body>";
+  page += "<h1>ESP32 Sensor Data</h1>";
+  page += "<p>Temperature: " + String(temp) + " C</p>";
+  page += "<p>Humidity: " + String(hum) + " %</p>";
+  page += "<p>Distance: " + String(distance) + " cm</p>";
+  page += "</body></html>";
+  
+  server.send(200, "text/html", page);
 }
