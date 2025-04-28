@@ -3,7 +3,6 @@
 #include <Keypad.h>
 #include <dht11.h>
 
-// Objects
 rgb_lcd lcd;
 dht11 DHT;
 
@@ -13,7 +12,6 @@ dht11 DHT;
 #define pirSensorPin 12
 #define buzzerPin 23
 #define DHT11_PIN 27
-
 #define trigPin 32
 #define echoPin 33
 
@@ -27,9 +25,8 @@ char hexaKeys[ROWS][COLS] = {
 };
 byte rowPins[ROWS] = {15, 2, 0, 4};
 byte colPins[COLS] = {16, 17, 5};
-Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
+Keypad customKeypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
-// Variables
 String enteredCode = "";
 const String correctCode = "123";
 bool alarmActive = false;
@@ -43,7 +40,6 @@ void setup() {
   pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
-
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
 
@@ -54,12 +50,10 @@ void setup() {
 }
 
 void loop() {
-  // Read DHT11
   int chk = DHT.read(DHT11_PIN);
   float temp = DHT.temperature;
   float hum = DHT.humidity;
 
-  // Read Ultrasonic
   long duration;
   float distance;
 
@@ -76,13 +70,11 @@ void loop() {
   Serial.print(distance);
   Serial.println(" cm");
 
-  // Check PIR or Distance to trigger alarm
   int pirValue = digitalRead(pirSensorPin);
-  if (pirValue == HIGH || distance <= 30) {  // 🚨 TRIGGER if motion OR object closer than 30cm
+  if (pirValue == HIGH || distance <= 30) {
     alarmActive = true;
   }
 
-  // If ALARM is ACTIVE
   if (alarmActive) {
     tone(buzzerPin, 1000);
     flashLEDs();
@@ -111,14 +103,11 @@ void loop() {
         lcd.clear();
       }
     }
-  } 
-  // If ALARM is NOT ACTIVE
-  else {
+  } else {
     noTone(buzzerPin);
     digitalWrite(led1, LOW);
     digitalWrite(led2, LOW);
 
-    // Display Temp & Humidity when normal
     lcd.setCursor(0, 0);
     lcd.print("Temp:");
     lcd.print(temp, 0);
@@ -131,10 +120,9 @@ void loop() {
     lcd.print("%   ");
   }
 
-  delay(300); // Small delay to keep it smooth
+  delay(300);
 }
 
-// Flash LEDs function
 void flashLEDs() {
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= 500) {
@@ -145,7 +133,6 @@ void flashLEDs() {
   }
 }
 
-// Display message function
 void displayMessage(String message) {
   static String previousMessage = "";
   if (message != previousMessage) {
