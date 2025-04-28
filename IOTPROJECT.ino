@@ -1,13 +1,21 @@
 #include <Wire.h>
 #include "rgb_lcd.h"
 #include <Keypad.h>
+#include <dht11.h>
 
-// Creating an  object of the rgb_lcd 
+// Objects
 rgb_lcd lcd;
-int led1 = 18; // First LED
-int led2 = 19; // Second LED
-int pirSensorPin = 12; // PIR sensor pin
-int buzzerPin = 23; // Buzzer pin
+dht11 DHT;
+
+// Pins
+#define led1 18
+#define led2 19
+#define pirSensorPin 12
+#define buzzerPin 23
+#define DHT11_PIN 27
+
+#define trigPin 32
+#define echoPin 33
 
 // Keypad setup
 const byte ROWS = 4, COLS = 3;
@@ -21,78 +29,112 @@ byte rowPins[ROWS] = {15, 2, 0, 4};
 byte colPins[COLS] = {16, 17, 5};
 Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
-
-String enteredCode = ""; //String to Store the passcode
-const String correctCode = "123"; //the correct code 
+// Variables
+String enteredCode = "";
+const String correctCode = "123";
 bool alarmActive = false;
-
-// LED flashing
 unsigned long previousMillis = 0;
 bool ledState = false;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(pirSensorPin, INPUT); 
-  pinMode(led1, OUTPUT);        
+
+  pinMode(pirSensorPin, INPUT);
+  pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
 
-  lcd.begin(16, 2);   
-  
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  lcd.begin(16, 2);
   lcd.print("System Ready");
-  delay(2000); 
+  delay(2000);
   lcd.clear();
 }
 
 void loop() {
-// Checks if motion is detected
-int pirValue = digitalRead(pirSensorPin); 
-if (pirValue == HIGH) {
-  alarmActive = true;
-}
+  // Read DHT11
+  int chk = DHT.read(DHT11_PIN);
+  float temp = DHT.temperature;
+  float hum = DHT.humidity;
 
-if (alarmActive) {
-  // when the alarm is triggered the buzzer and flash LEDs
-  Serial.println("Alarm triggered. Activating buzzer...");
-  tone(buzzerPin, 1000); // Sounds the buzzer
-  flashLEDs(); // Function to flash LEDs
-  displayMessage("Enter Passcode:");
+  // Read Ultrasonic
+  long duration;
+  float distance;
 
-  // Capture keypresses and check the entered code
-  char customKey = customKeypad.getKey();
-  if (customKey) {
-    enteredCode += customKey; // Adds key pressed to the string
-    lcd.clear();
-    lcd.print("Code: ");
-    lcd.print(enteredCode);
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
 
-    // Check if the entered code is correct
-    if (enteredCode == correctCode) {
-      alarmActive = false;
-      noTone(buzzerPin);
-      enteredCode = ""; // Resets string is the code is correct 
-      lcd.clear();
-      lcd.print("Alarm Deactivated");
-      delay(2000);
-      lcd.clear();
-    } else if (enteredCode.length() >= 3) {
-      // If the entered code is incorrect, reset and display message
-      enteredCode = "";
-      lcd.clear();
-      lcd.print("Wrong Passcode");
-      delay(2000);
-      lcd.clear();
-    }
+  duration = pulseIn(echoPin, HIGH);
+  distance = (duration * 0.0343) / 2;
+
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
+  // Check PIR or Distance to trigger alarm
+  int pirValue = digitalRead(pirSensorPin);
+  if (pirValue == HIGH || distance <= 30) {  // 🚨 TRIGGER if motion OR object closer than 30cm
+    alarmActive = true;
   }
-} else {
-  // If no motion is detected, turn off the buzzer and LEDs
-  noTone(buzzerPin);
-  digitalWrite(led1, LOW);
-  digitalWrite(led2, LOW);
-}
+
+  // If ALARM is ACTIVE
+  if (alarmActive) {
+    tone(buzzerPin, 1000);
+    flashLEDs();
+    displayMessage("Enter Passcode:");
+
+    char customKey = customKeypad.getKey();
+    if (customKey) {
+      enteredCode += customKey;
+      lcd.clear();
+      lcd.print("Code: ");
+      lcd.print(enteredCode);
+
+      if (enteredCode == correctCode) {
+        alarmActive = false;
+        noTone(buzzerPin);
+        enteredCode = "";
+        lcd.clear();
+        lcd.print("Alarm Deactivated");
+        delay(2000);
+        lcd.clear();
+      } else if (enteredCode.length() >= 3) {
+        enteredCode = "";
+        lcd.clear();
+        lcd.print("Wrong Passcode");
+        delay(2000);
+        lcd.clear();
+      }
+    }
+  } 
+  // If ALARM is NOT ACTIVE
+  else {
+    noTone(buzzerPin);
+    digitalWrite(led1, LOW);
+    digitalWrite(led2, LOW);
+
+    // Display Temp & Humidity when normal
+    lcd.setCursor(0, 0);
+    lcd.print("Temp:");
+    lcd.print(temp, 0);
+    lcd.print((char)223);
+    lcd.print("C   ");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Hum:");
+    lcd.print(hum, 0);
+    lcd.print("%   ");
+  }
+
+  delay(300); // Small delay to keep it smooth
 }
 
-// functions
+// Flash LEDs function
 void flashLEDs() {
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= 500) {
@@ -103,7 +145,7 @@ void flashLEDs() {
   }
 }
 
-//Displays message on LCD if changed
+// Display message function
 void displayMessage(String message) {
   static String previousMessage = "";
   if (message != previousMessage) {
