@@ -4,7 +4,7 @@
 #include <dht11.h>
 #include <WiFi.h>
 #include <WebServer.h>
-#include <HTTPClient.h>  // For sending data to ThingSpeak
+#include <HTTPClient.h>  
 
 rgb_lcd lcd;
 dht11 DHT;
@@ -12,7 +12,7 @@ dht11 DHT;
 const char* ssid = "VODAFONE-F578";
 const char* password = "J9crHhK6x4fKyeth";
 
-// Replace with your ThingSpeak Write API Key
+
 const String apiKey = "DOCZWGRUNT3RW3N9";
 const String thingSpeakURL = "http://api.thingspeak.com/update";
 
@@ -42,7 +42,6 @@ const String correctCode = "123";
 bool alarmActive = false;
 unsigned long previousMillis = 0;
 bool ledState = false;
-bool systemTriggered = false;
 
 float temp = 0;
 float hum = 0;
@@ -113,7 +112,6 @@ void checkAlarm() {
 
   if (pirValue == HIGH || distance <= 30) {
     alarmActive = true;
-    systemTriggered = true;
   }
 
   if (alarmActive) {
@@ -191,8 +189,6 @@ void handleRoot() {
 
   if (alarmActive) {
     page += "<p style='color:red;font-weight:bold;'>ALARM ACTIVE!</p>";
-  } else if (systemTriggered) {
-    page += "<p style='color:orange;'>System Triggered - Awaiting Reset</p>";
   } else {
     page += "<p style='color:green;'>System Normal</p>";
   }
@@ -202,7 +198,7 @@ void handleRoot() {
 }
 
 void updateThingSpeak() {
-  if (millis() - lastThingSpeakUpdate > 15000) {  
+  if (millis() - lastThingSpeakUpdate > 15000) {
     if (WiFi.status() == WL_CONNECTED) {
       HTTPClient http;
       String url = thingSpeakURL + "?api_key=" + apiKey +
@@ -220,3 +216,4 @@ void updateThingSpeak() {
     }
   }
 }
+
