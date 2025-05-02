@@ -4,17 +4,20 @@
 #include <dht11.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <HTTPClient.h>  // For sending data to ThingSpeak
 
 rgb_lcd lcd;
 dht11 DHT;
 
-// WiFi credentials
-const char* ssid = "VODAFONE-F578";         
-const char* password = "J9crHhK6x4fKyeth"; 
+const char* ssid = "VODAFONE-F578";
+const char* password = "J9crHhK6x4fKyeth";
+
+// Replace with your ThingSpeak Write API Key
+const String apiKey = "DOCZWGRUNT3RW3N9";
+const String thingSpeakURL = "http://api.thingspeak.com/update";
 
 WebServer server(80);
 
-// Pins
 #define led1 18
 #define led2 19
 #define pirSensorPin 12
@@ -23,7 +26,6 @@ WebServer server(80);
 #define trigPin 32
 #define echoPin 33
 
-// Keypad setup
 const byte ROWS = 4, COLS = 3;
 char hexaKeys[ROWS][COLS] = {
   {'1', '2', '3'},
@@ -40,10 +42,12 @@ const String correctCode = "123";
 bool alarmActive = false;
 unsigned long previousMillis = 0;
 bool ledState = false;
+bool systemTriggered = false;
 
 float temp = 0;
 float hum = 0;
 float distance = 0;
+unsigned long lastThingSpeakUpdate = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -77,8 +81,9 @@ void setup() {
 void loop() {
   readSensors();
   checkAlarm();
+  updateThingSpeak();
   server.handleClient();
-  delay(300);
+  delay(1000);
 }
 
 void readSensors() {
@@ -108,6 +113,7 @@ void checkAlarm() {
 
   if (pirValue == HIGH || distance <= 30) {
     alarmActive = true;
+    systemTriggered = true;
   }
 
   if (alarmActive) {
@@ -176,12 +182,41 @@ void displayMessage(String message) {
 }
 
 void handleRoot() {
-  String page = "<html><head><title>ESP32 Sensor</title></head><body>";
-  page += "<h1>ESP32 Sensor Data</h1>";
-  page += "<p>Temperature: " + String(temp) + " C</p>";
-  page += "<p>Humidity: " + String(hum) + " %</p>";
-  page += "<p>Distance: " + String(distance) + " cm</p>";
-  page += "</body></html>";
-  
+  String page = "<html><head><meta http-equiv='refresh' content='1'><title>Home Security Alarm System</title>";
+  page += "<style>body{font-family:sans-serif;background:#f4f4f4;margin:20px;}h1{color:#333;}div.card{padding:15px;background:white;border-radius:10px;box-shadow:0 0 10px #ccc;}p{font-size:18px;}</style></head><body>";
+  page += "<h1>Home Security Alarm System</h1><div class='card'>";
+  page += "<p><strong>Temperature:</strong> " + String(temp) + " &deg;C</p>";
+  page += "<p><strong>Humidity:</strong> " + String(hum) + " %</p>";
+  page += "<p><strong>Distance:</strong> " + String(distance) + " cm</p>";
+
+  if (alarmActive) {
+    page += "<p style='color:red;font-weight:bold;'>ALARM ACTIVE!</p>";
+  } else if (systemTriggered) {
+    page += "<p style='color:orange;'>System Triggered - Awaiting Reset</p>";
+  } else {
+    page += "<p style='color:green;'>System Normal</p>";
+  }
+
+  page += "</div></body></html>";
   server.send(200, "text/html", page);
+}
+
+void updateThingSpeak() {
+  if (millis() - lastThingSpeakUpdate > 15000) {  
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      String url = thingSpeakURL + "?api_key=" + apiKey +
+                   "&field1=" + String(temp) +
+                   "&field2=" + String(hum) +
+                   "&field3=" + String(distance);
+
+      http.begin(url);
+      int httpCode = http.GET();
+      http.end();
+
+      Serial.print("ThingSpeak update code: ");
+      Serial.println(httpCode);
+      lastThingSpeakUpdate = millis();
+    }
+  }
 }
