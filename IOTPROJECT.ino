@@ -4,59 +4,46 @@
 #include <dht11.h>
 #include <WiFi.h>
 #include <WebServer.h>
-#include <HTTPClient.h>  
 
 rgb_lcd lcd;
 dht11 DHT;
 
-const char* ssid = "VODAFONE-F578";
-const char* password = "J9crHhK6x4fKyeth";
-
-
-const String apiKey = "DOCZWGRUNT3RW3N9";
-const String thingSpeakURL = "http://api.thingspeak.com/update";
+const char* ssid     = "iPhone";      
+const char* password = "Daniel11";  
 
 WebServer server(80);
 
-#define led1 18
-#define led2 19
-#define pirSensorPin 12
-#define buzzerPin 23
-#define DHT11_PIN 27
-#define trigPin 32
-#define echoPin 33
+#define PIR_PIN    12
+#define BUZ_PIN    23
+#define DHT11_PIN  27
+
+
 
 const byte ROWS = 4, COLS = 3;
 char hexaKeys[ROWS][COLS] = {
-  {'1', '2', '3'},
-  {'4', '5', '6'},
-  {'7', '8', '9'},
-  {'*', '0', '#'}
+  {'1','2','3'},
+  {'4','5','6'},
+  {'7','8','9'},
+  {'*','0','#'}
 };
+
 byte rowPins[ROWS] = {15, 2, 0, 4};
 byte colPins[COLS] = {16, 17, 5};
 Keypad customKeypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
+
 String enteredCode = "";
 const String correctCode = "123";
 bool alarmActive = false;
-unsigned long previousMillis = 0;
-bool ledState = false;
 
 float temp = 0;
-float hum = 0;
-float distance = 0;
-unsigned long lastThingSpeakUpdate = 0;
+float hum  = 0;
 
 void setup() {
   Serial.begin(9600);
 
-  pinMode(pirSensorPin, INPUT);
-  pinMode(led1, OUTPUT);
-  pinMode(led2, OUTPUT);
-  pinMode(buzzerPin, OUTPUT);
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
+  pinMode(PIR_PIN, INPUT);
+  pinMode(BUZ_PIN, OUTPUT);
 
   lcd.begin(16, 2);
   lcd.print("System Ready");
@@ -80,43 +67,27 @@ void setup() {
 void loop() {
   readSensors();
   checkAlarm();
-  updateThingSpeak();
   server.handleClient();
-  delay(1000);
+  delay(200);
 }
 
 void readSensors() {
   int chk = DHT.read(DHT11_PIN);
   if (chk == DHTLIB_OK) {
     temp = DHT.temperature;
-    hum = DHT.humidity;
+    hum  = DHT.humidity;
   }
-
-  long duration;
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-
-  duration = pulseIn(echoPin, HIGH);
-  distance = (duration * 0.0343) / 2;
-
-  Serial.print("Distance: ");
-  Serial.print(distance);
-  Serial.println(" cm");
 }
 
 void checkAlarm() {
-  int pirValue = digitalRead(pirSensorPin);
+  int pirValue = digitalRead(PIR_PIN);
 
-  if (pirValue == HIGH || distance <= 30) {
+  if (pirValue == HIGH) {
     alarmActive = true;
   }
 
   if (alarmActive) {
-    tone(buzzerPin, 1000);
-    flashLEDs();
+    tone(BUZ_PIN, 1000);
     displayMessage("Enter Passcode:");
 
     char customKey = customKeypad.getKey();
@@ -128,7 +99,7 @@ void checkAlarm() {
 
       if (enteredCode == correctCode) {
         alarmActive = false;
-        noTone(buzzerPin);
+        noTone(BUZ_PIN);
         enteredCode = "";
         lcd.clear();
         lcd.print("Alarm Deactivated");
@@ -143,9 +114,7 @@ void checkAlarm() {
       }
     }
   } else {
-    noTone(buzzerPin);
-    digitalWrite(led1, LOW);
-    digitalWrite(led2, LOW);
+    noTone(BUZ_PIN);
 
     lcd.setCursor(0, 0);
     lcd.print("Temp:");
@@ -157,16 +126,6 @@ void checkAlarm() {
     lcd.print("Hum:");
     lcd.print(hum, 0);
     lcd.print("%   ");
-  }
-}
-
-void flashLEDs() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= 500) {
-    previousMillis = currentMillis;
-    ledState = !ledState;
-    digitalWrite(led1, ledState ? HIGH : LOW);
-    digitalWrite(led2, ledState ? LOW : HIGH);
   }
 }
 
@@ -185,7 +144,6 @@ void handleRoot() {
   page += "<h1>Home Security Alarm System</h1><div class='card'>";
   page += "<p><strong>Temperature:</strong> " + String(temp) + " &deg;C</p>";
   page += "<p><strong>Humidity:</strong> " + String(hum) + " %</p>";
-  page += "<p><strong>Distance:</strong> " + String(distance) + " cm</p>";
 
   if (alarmActive) {
     page += "<p style='color:red;font-weight:bold;'>ALARM ACTIVE!</p>";
@@ -196,24 +154,3 @@ void handleRoot() {
   page += "</div></body></html>";
   server.send(200, "text/html", page);
 }
-
-void updateThingSpeak() {
-  if (millis() - lastThingSpeakUpdate > 15000) {
-    if (WiFi.status() == WL_CONNECTED) {
-      HTTPClient http;
-      String url = thingSpeakURL + "?api_key=" + apiKey +
-                   "&field1=" + String(temp) +
-                   "&field2=" + String(hum) +
-                   "&field3=" + String(distance);
-
-      http.begin(url);
-      int httpCode = http.GET();
-      http.end();
-
-      Serial.print("ThingSpeak update code: ");
-      Serial.println(httpCode);
-      lastThingSpeakUpdate = millis();
-    }
-  }
-}
-
